@@ -5,6 +5,7 @@ import {
   Keyboard,
   Image,
   View,
+  Picker,
   TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Linking,
@@ -23,6 +24,10 @@ export default class SignInScreen extends React.Component {
     port: 443,
     error: '',
     protocol: 'https',
+    //server: 'http://192.168.0.26:11000',
+    server: 'https://www.trustcode.com.br',
+    database_list: [],
+    database: '',
   };
 
   handleServerChange = server => {
@@ -38,6 +43,9 @@ export default class SignInScreen extends React.Component {
   };
 
   render() {
+     let databaseItems = this.state.database_list.map( (s, i) => {
+         return <Picker.Item key={i} value={s} label={s} />
+     });
     return (
       <KeyboardAvoidingView style={styles.containerView} behavior="padding" keyboardVerticalOffset={-400}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -56,6 +64,25 @@ export default class SignInScreen extends React.Component {
                 style={styles.loginFormTextInput}
                 leftIcon={<Icon name="home" style={styles.icon} />}
               />
+              <Input
+                placeholder="Password"
+                placeholderColor="#c4c3cb"
+                value={this.state.password}
+                onChangeText={this.handlePasswordChange}
+                style={styles.loginFormTextInput}
+                secureTextEntry={true}
+                autoCapitalize="none"
+                autoCorrect={false}
+                leftIcon={<Icon name="key" style={styles.icon} />}
+              />
+              <Picker
+                selectedValue={this.state.database}
+                style={styles.loginFormTextInput}
+                onValueChange={(itemValue, itemIndex) =>
+                  this.setState({database: itemValue})
+                }>
+                {databaseItems}
+              </Picker>
               <Input
                 placeholder="Username"
                 placeholderColor="#c4c3cb"
@@ -99,40 +126,47 @@ export default class SignInScreen extends React.Component {
   }
 
   _signInAsync = async () => {
-    var odoo_api = await new OdooApi(
-      this.state.server,
-      this.state.user,
-      this.state.password,
-    );
-    const database_list = await odoo_api.database_list;
+    try {
+      var odoo_api = new OdooApi(
+        this.state.server,
+        this.state.user,
+        this.state.password,
+      );
 
-    if (database_list && database_list.length) {
-      if (database_list.length === 1) {
-        this.state.database = database_list[0];
+      const promise = odoo_api._database_list();
+      const database_list = await promise;
+
+      this.setState({ database_list });
+      if (database_list && database_list.length) {
+        if (database_list.length === 1) {
+          this.state.database = database_list[0];
+        } else {
+          console.error('Not implemented');
+        }
+        var connection = await odoo_api.connect(this.state.database);
+        if (typeof connection.uid === 'number') {
+          await AsyncStorage.setItem('userToken', connection.session_id);
+          await AsyncStorage.setItem('user_display_name', connection.name);
+          await AsyncStorage.setItem('user_uid', connection.uid.toString());
+          await AsyncStorage.setItem('database', connection.db);
+          const imagem = await odoo_api.get_user_image(connection.uid);
+          await AsyncStorage.setItem('image_small', imagem);
+          await AsyncStorage.setItem(
+            'server_backend_url',
+            odoo_api.server_backend_url,
+          );
+          this.props.navigation.navigate('App', {
+            url: odoo_api.server_backend_url,
+          });
+        } else {
+          alert('Senha incorreta');
+        }
       } else {
-        console.error('Not implemented');
+        // empty
+        alert('No database');
       }
-      var connection = await odoo_api.connect(this.state.database);
-      if (typeof connection.uid === 'number') {
-        await AsyncStorage.setItem('userToken', connection.session_id);
-        await AsyncStorage.setItem('user_display_name', connection.name);
-        await AsyncStorage.setItem('user_uid', connection.uid.toString());
-        await AsyncStorage.setItem('database', connection.db);
-        const imagem = await odoo_api.get_user_image(connection.uid);
-        await AsyncStorage.setItem('image_small', imagem);
-        await AsyncStorage.setItem(
-          'server_backend_url',
-          odoo_api.server_backend_url,
-        );
-        this.props.navigation.navigate('App', {
-          url: odoo_api.server_backend_url,
-        });
-      } else {
-        alert('Senha incorreta');
-      }
-    } else {
-      // empty
-      alert('No database');
+    } catch (e) {
+        alert('Unexpected error' + e);
     }
   };
 }

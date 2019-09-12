@@ -27,7 +27,7 @@ const url_api = require('url');
 
 class OdooApi {
   constructor(url, login, password) {
-    this.complete_url = url;
+    this.complete_url = url.toLowerCase();
     this.login = login;
     this.password = password;
     this._parseURL();
@@ -63,35 +63,24 @@ class OdooApi {
     this.server_backend_url = this.server_complete_url + 'web';
   }
 
-  get database_list() {
-    return this._getDatabases();
+  parseResponse(response) {
+    if(!response.success){
+      throw response.error;
+    }
+    return response.data;
   }
 
-  _getDatabases() {
-    return this.odoo
-      .rpc_call('/web/database/list', {})
-      .then(response => {
-        if (response.success === true) {
-          return response.data;
-        }
-      })
-      .catch(e => {
-        console.log(e);
-      });
+  async _database_list() {
+    const promise = this.odoo.rpc_call('/web/database/list', {});
+    const response = await promise;
+    return this.parseResponse(response);
   }
 
-  connect(database) {
+  async connect(database) {
     this.odoo.database = database;
-    return this.odoo
-      .connect()
-      .then(response => {
-        if (response.success === true) {
-          return response.data;
-        }
-      })
-      .catch(e => {
-        return false;
-      });
+    const promise = this.odoo.connect();
+    const response = await promise;
+    return this.parseResponse(response);
   }
 
   get_user_image(user_id) {
@@ -104,9 +93,6 @@ class OdooApi {
         if (response.success === true) {
           return response.data[0].image_small;
         }
-      })
-      .catch(e => {
-        return false;
       });
   }
 }
